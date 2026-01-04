@@ -35,6 +35,28 @@ const formatDate = (dateString: string) => {
   }).format(date);
 };
 
+const getFriendlyMessage = () => {
+    const messages = [
+      "Siap mengatur cuan hari ini?",
+      "Jangan lupa catat pengeluaranmu ya.",
+      "Satu langkah kecil untuk masa depan besar.",
+      "Semoga harimu menyenangkan dan dompetmu aman!",
+      "Yuk, cek kesehatan finansialmu sejenak.",
+      "Uangmu aman, hatimu tenang.",
+    ];
+    const hour = new Date().getHours();
+    return messages[hour % messages.length]; 
+  };
+
+const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 4) return "Masih bangun";
+    if (hour < 11) return "Selamat Pagi";
+    if (hour < 15) return "Selamat Siang";
+    if (hour < 18) return "Selamat Sore";
+    return "Selamat Malam";
+  };
+
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
 
@@ -52,14 +74,30 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+   <div className="space-y-8"> {/* Jarak antar section diperlebar sedikit biar lega */}
+      
+      {/* --- HEADER BARU YANG LEBIH HANGAT --- */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Dashboard
+          <div className="flex items-center gap-2 mb-1">
+             <span className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-wider">
+                Dashboard
+             </span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+            {getGreeting()}, {stats.userName?.split(' ')[0]}! 👋
           </h1>
-          <p className="text-slate-500">Welcome back, {stats.userName}</p>
+          <p className="text-slate-500 text-lg mt-2 font-medium">
+            {getFriendlyMessage()}
+          </p>
+        </div>
+        
+        {/* Opsional: Menampilkan tanggal hari ini agar lebih informatif */}
+        <div className="hidden md:block text-right">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Hari Ini</p>
+            <p className="text-xl font-bold text-slate-700">
+              {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
         </div>
       </div>
 

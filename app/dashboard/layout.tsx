@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { API_ENDPOINTS } from "@/lib/api-config";
 
 const NEXT_PUBLIC_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "https://pandraworks.com";
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "default_secret_key_change_me");
 
 async function getFreshUserProfile() {

@@ -10,6 +10,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { email, password } = body;
 
+    console.log("Login Request:", { email, password });
+
     const res = await fetch(API_ENDPOINTS.LOGIN, {
       method: "POST",
       headers: {

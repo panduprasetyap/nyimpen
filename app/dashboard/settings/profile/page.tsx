@@ -8,7 +8,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/auth";
 
 const NEXT_PUBLIC_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "https://pandraworks.com";
 
 import { API_ENDPOINTS } from "@/lib/api-config";
 
@@ -95,6 +95,7 @@ export default function ProfilePage() {
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [isImageLoading, setIsImageLoading] = useState(false);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -141,14 +142,27 @@ export default function ProfilePage() {
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const imageDataUrl = await readFile(file);
-      setImageSrc(imageDataUrl as string);
-      setIsCropModalOpen(true);
-      // Reset input value so same file can be selected again if needed
-      e.target.value = "";
-    }
+      const file = e.target.files?.[0];
+        if (file) {
+          setIsImageLoading(true); // 1. Mulai Loading
+
+          const reader = new FileReader();
+          reader.onload = () => {
+            setImageSrc(reader.result as string);
+            setIsCropModalOpen(true); // Buka modal crop
+            setIsImageLoading(false); // 2. Selesai Loading
+          };
+          // Tambahkan error handling jika perlu
+          reader.onerror = () => {
+              setIsImageLoading(false);
+              alert("Gagal membaca file");
+          };
+          
+          reader.readAsDataURL(file);
+        }
+        
+        // Reset value input agar bisa upload file yang sama jika dicancel
+        e.target.value = '';
   };
 
   const readFile = (file: File) => {
@@ -349,6 +363,15 @@ export default function ProfilePage() {
           </div>
         </form>
       </div>
+
+      {isImageLoading && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center animate-in zoom-in-95">
+            <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mb-3"></div>
+            <p className="text-sm font-bold text-slate-700">Memproses Gambar...</p>
+          </div>
+        </div>
+      )}
 
       {/* Crop Modal */}
       {isCropModalOpen && imageSrc && (

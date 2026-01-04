@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createTransaction, getWalletsAndCategories } from '@/app/api/transaction/actions';
 import { useFormStatus } from 'react-dom';
+import Link from 'next/link';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -27,6 +28,7 @@ export default function AddTransactionModal() {
   const [wallets, setWallets] = useState<{ id: string, name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string, name: string, type: string }[]>([]);
   const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
@@ -39,6 +41,8 @@ export default function AddTransactionModal() {
     setWallets(data.wallets);
     setCategories(data.categories);
   }
+
+ 
 
   async function clientAction(formData: FormData) {
     const result = await createTransaction(formData);
@@ -59,6 +63,7 @@ export default function AddTransactionModal() {
       >
         + Add New
       </button>
+      
 
       {isOpen && createPortal(
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-all text-slate-900 animate-in fade-in duration-300 overflow-y-auto py-12">
@@ -76,6 +81,25 @@ export default function AddTransactionModal() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
+
+            {wallets.length == 0 ? (
+               // TAMPILAN JIKA WALLET KOSONG (Alert UI)
+               <div className="text-center py-8 bg-slate-50 rounded-3xl border border-slate-100">
+                  <div className="w-16 h-16 bg-orange-100 text-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">Dompet Tidak Ditemukan</h3>
+                  <p className="text-slate-500 px-6 mb-6">
+                    Anda harus memiliki setidaknya satu dompet (Wallet) sebelum bisa mencatat transaksi.
+                  </p>
+                  <Link 
+                    href="/dashboard/wallets" 
+                    className="inline-block bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all"
+                  >
+                    Buat Dompet Baru
+                  </Link>
+               </div>
+            ) : (
 
             <form action={clientAction} className="space-y-6">
               {/* Type Switcher */}
@@ -174,6 +198,8 @@ export default function AddTransactionModal() {
                 <SubmitButton />
               </div>
             </form>
+
+            )}
           </div>
         </div>,
         document.body

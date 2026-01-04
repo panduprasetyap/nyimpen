@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     let name: string;
     try {
         const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
+        currentPayload = payload;
         userId = payload.userId as string;
         email = payload.email as string;
         name = payload.name as string;
@@ -73,13 +74,14 @@ export async function POST(req: Request) {
         { status: res.status }
       );
     }
+    
 
     
-    const newSessionPayload = {
-        ...currentPayload, // Copy userId, email, photos, dll
+ const newSessionPayload = {
+        ...currentPayload, // Copy data lama (userId, email, photos, dll)
         job_title: job_title, // Update job title
+        estimated_monthly_income: Number(estimated_monthly_income) // Update income juga
     };
-
     // 2. Sign Token Baru
     const newToken = await new SignJWT(newSessionPayload)
       .setProtectedHeader({ alg: "HS256" })

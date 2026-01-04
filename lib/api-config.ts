@@ -1,5 +1,5 @@
 export const REST_SERVER_URL =
-  process.env.NEXT_PUBLIC_REST_SERVER_URL || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_REST_SERVER_URL || "https://pandraworks.com";
 
 export const API_ENDPOINTS = {
   LOGIN: `${REST_SERVER_URL}/api/login`,
@@ -14,5 +14,5 @@ export const API_ENDPOINTS = {
   CREATE_TRANSACTION: `${REST_SERVER_URL}/api/transactions/add`,
   DASHBOARD: `${REST_SERVER_URL}/api/transactions/dashboard`,
   WALLET_CATEGORY: `${REST_SERVER_URL}/api/wallet-data`,
-  TRANSFER: `${REST_SERVER_URL}/api/wallets/transfer`,
+  TRANSFER: `${REST_SERVER_URL}/api/transfer`,
 };
