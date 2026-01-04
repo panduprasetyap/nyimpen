@@ -49,12 +49,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white relative">
+      
+      <Link 
+        href="/" 
+        className="absolute top-8 left-8 flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-slate-900 transition-colors group"
+      >
+        <div className="p-2 bg-slate-50 rounded-full group-hover:bg-slate-100 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-0.5 transition-transform"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        </div>
+        <span>Kembali</span>
+      </Link>
+
       <div className="max-w-md w-full">
         <div className="text-center mb-10">
           <img src="/assets/logo.png" alt="Nyimpen Logo" className="w-12 h-12 mx-auto mb-4 rounded-xl shadow-sm" />
-          <h1 className="text-2xl font-bold text-slate-900">Welcome Back</h1>
-          <p className="text-slate-500">Sign in to continue to Nyimpen</p>
+          <h1 className="text-2xl font-bold text-slate-900">Selamat Datang Kembali</h1>
+          <p className="text-slate-500">Login dan lanjutkan ke dashboard Nyimpen</p>
         </div>
 
         {error && (
@@ -120,9 +131,9 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-sm text-slate-600">
-          Don't have an account?{" "}
+          Belum Punya Akun?{" "}
           <Link href="/public/register" className="font-semibold text-slate-900 hover:underline">
-            Create one
+            Buat Akun
           </Link>
         </p>
       </div>

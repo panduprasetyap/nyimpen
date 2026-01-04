@@ -1,104 +1,103 @@
-'use server'
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { db } from '@/lib/db';
-import { getSession, getCurrentUser } from '@/lib/auth';
+import { revalidatePath } from "next/cache";
+import { getSession, getCurrentUser } from "@/lib/auth";
+import { API_ENDPOINTS } from "@/lib/api-config";
+
+// --- ACTIONS ---
 
 export async function createTransaction(formData: FormData) {
   try {
     const session = await getSession();
     if (!session || !session.userId) {
-      return { success: false, message: 'Anda harus login terlebih dahulu.' };
+      return { success: false, message: "Anda harus login terlebih dahulu." };
     }
 
-    const userId = BigInt(session.userId as string);
-    const walletId = BigInt(formData.get('wallet_id') as string);
-    const categoryId = BigInt(formData.get('category_id') as string);
-    const amount = Number(formData.get('amount'));
-    const type = formData.get('type') as 'income' | 'expense';
-    const transactionDate = new Date(formData.get('transaction_date') as string);
-    const description = formData.get('description') as string;
+    // Persiapkan payload JSON untuk dikirim ke Laravel
+    const payload = {
+      // Auth fallback sesuai logic Laravel Controller sebelumnya
+      id: session.userId,
 
-    if (!walletId || !categoryId || !amount || !type || !transactionDate) {
-      return { success: false, message: 'Data transaksi tidak lengkap.' };
-    }
+      wallet_id: formData.get("wallet_id"),
+      category_id: formData.get("category_id"),
+      amount: formData.get("amount"),
+      type: formData.get("type"),
+      transaction_date: formData.get("transaction_date"),
+      description: formData.get("description"),
+    };
 
-    // Perform atomic transaction: create record + update wallet balance
-    await db.$transaction(async (tx) => {
-      // 1. Create the transaction
-      await tx.transactions.create({
-        data: {
-          user_id: userId,
-          wallet_id: walletId,
-          category_id: categoryId,
-          amount: amount,
-          type: type,
-          transaction_date: transactionDate,
-          description: description,
-        },
-      });
-
-      // 2. Update wallet balance
-      const balanceChange = type === 'income' ? amount : -amount;
-      await tx.wallets.update({
-        where: { id: walletId },
-        data: {
-          balance: {
-            increment: balanceChange,
-          },
-        },
-      });
+    const res = await fetch(API_ENDPOINTS.CREATE_TRANSACTION, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
-    revalidatePath('/dashboard/transactions');
-    revalidatePath('/dashboard/wallets');
-    revalidatePath('/dashboard');
+    const data = await res.json();
 
-    return { success: true, message: 'Transaksi berhasil disimpan!' };
+    if (!res.ok) {
+      return {
+        success: false,
+        message: data.message || "Gagal menyimpan transaksi.",
+      };
+    }
+
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/wallets");
+    revalidatePath("/dashboard");
+
+    return { success: true, message: "Transaksi berhasil disimpan!" };
   } catch (error) {
-    console.error('Error creating transaction:', error);
-    return { success: false, message: 'Terjadi kesalahan sistem saat menyimpan transaksi.' };
+    console.error("Error creating transaction:", error);
+    return {
+      success: false,
+      message: "Terjadi kesalahan sistem saat menghubungi server.",
+    };
   }
 }
 
 export async function getTransactions() {
   try {
+  
     const session = await getSession();
     if (!session || !session.userId) return [];
 
-    const userId = BigInt(session.userId as string);
+    const res = await fetch(
+      `${API_ENDPOINTS.TRANSACTIONS}?id=${session.userId}`,
+      {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      }
+    );
 
-    const transactions = await db.transactions.findMany({
-      where: { user_id: userId },
-      include: {
-        categories: true,
-        wallets: true,
-      },
-      orderBy: {
-        transaction_date: 'desc',
-      },
-    });
+    if (!res.ok) return [];
 
-    // Serialize BigInt and dates
-    return transactions.map((tx) => ({
+
+    const result = await res.json();
+
+    const transactions = Array.isArray(result) ? result : result.data || [];
+
+    return transactions.map((tx: any) => ({
       id: tx.id.toString(),
       type: tx.type,
       amount: Number(tx.amount),
-      date: tx.transaction_date.toISOString(),
+      date: tx.transaction_date,
       description: tx.description,
       wallet_id: tx.wallet_id.toString(),
       category_id: tx.category_id.toString(),
       category: {
-        id: tx.categories.id.toString(),
-        name: tx.categories.name,
+        id: tx.category?.id.toString() || "",
+        name: tx.category?.name || "",
       },
       wallet: {
-        id: tx.wallets.id.toString(),
-        name: tx.wallets.name,
+        id: tx.wallet?.id.toString() || "",
+        name: tx.wallet?.name || "",
       },
     }));
   } catch (error) {
-    console.error('Error fetching transactions:', error);
+    console.error("Error fetching transactions:", error);
     return [];
   }
 }
@@ -108,24 +107,30 @@ export async function getWalletsAndCategories() {
     const session = await getSession();
     if (!session || !session.userId) return { wallets: [], categories: [] };
 
-    const userId = BigInt(session.userId as string);
-
-    const wallets = await db.wallets.findMany({
-      where: { user_id: userId, is_active: true },
-      orderBy: { name: 'asc' },
+    // Fetch endpoint 'create' di Laravel yang return data wallet & categories
+    const res = await fetch(`${API_ENDPOINTS.WALLET_CATEGORY}?id=${session.userId}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
     });
 
-    const categories = await db.categories.findMany({
-      where: { user_id: userId },
-      orderBy: { name: 'asc' },
-    });
+    if (!res.ok) return { wallets: [], categories: [] };
 
+    const data = await res.json();
+
+    // Mapping data
     return {
-      wallets: wallets.map(w => ({ id: w.id.toString(), name: w.name })),
-      categories: categories.map(c => ({ id: c.id.toString(), name: c.name, type: c.type })),
+      wallets: (data.wallets || []).map((w: any) => ({
+        id: w.id.toString(),
+        name: w.name,
+      })),
+      categories: (data.categories || []).map((c: any) => ({
+        id: c.id.toString(),
+        name: c.name,
+        type: c.type,
+      })),
     };
   } catch (error) {
-    console.error('Error fetching wallets/categories:', error);
+    console.error("Error fetching wallets/categories:", error);
     return { wallets: [], categories: [] };
   }
 }
@@ -135,71 +140,49 @@ export async function getDashboardStats() {
     const session = await getSession();
     if (!session || !session.userId) return null;
 
-    const userId = BigInt(session.userId as string);
-    const user = await getCurrentUser();
+    // Karena route Laravel menggunakan POST, kita kirim ID di body
+    const payload = {
+      id: session.userId, // ID untuk autentikasi manual di Laravel Controller
+    };
 
-    // 1. Total Assets
-    const wallets = await db.wallets.findMany({
-      where: { user_id: userId, is_active: true }
-    });
-    const totalAssets = wallets.reduce((sum, w) => sum + Number(w.balance), 0);
-
-    // 2. Monthly Stats (Current Month)
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    const monthlyTransactions = await db.transactions.findMany({
-      where: {
-        user_id: userId,
-        transaction_date: {
-          gte: firstDayOfMonth,
-          lte: lastDayOfMonth,
-        },
+    const res = await fetch(API_ENDPOINTS.DASHBOARD, {
+      method: "POST", // Sesuai permintaan Route::post
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
+      body: JSON.stringify(payload),
+      cache: "no-store", // Pastikan data selalu fresh
     });
 
-    const monthlyIncome = monthlyTransactions
-      .filter(tx => tx.type === 'income')
-      .reduce((sum, tx) => sum + Number(tx.amount), 0);
+    if (!res.ok) {
+      const errorText = await res.text(); // Baca sebagai text dulu
+      console.error("Error Status:", res.status);
+      console.error("Error Body:", errorText); // Lihat isi error HTML/JSON-nya
+      return null;
+    }
 
-    const monthlyExpense = monthlyTransactions
-      .filter(tx => tx.type === 'expense')
-      .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-    // 3. Savings Rate
-    const savingsRate = monthlyIncome > 0 
-      ? Math.round(((monthlyIncome - monthlyExpense) / monthlyIncome) * 100) 
-      : 0;
-
-    // 4. Recent Transactions
-    const recentTransactionsRaw = await db.transactions.findMany({
-      where: { user_id: userId },
-      include: { categories: true },
-      orderBy: { transaction_date: 'desc' },
-      take: 5,
-    });
-
-    const recentTransactions = recentTransactionsRaw.map(tx => ({
-      id: tx.id.toString(),
-      title: tx.description || tx.categories.name,
-      category: tx.categories.name,
-      amount: Number(tx.amount),
-      type: tx.type,
-      date: tx.transaction_date.toISOString(),
-    }));
+    const data = await res.json();
 
     return {
-      userName: user?.name || 'User',
-      totalAssets,
-      monthlyIncome,
-      monthlyExpense,
-      savingsRate,
-      recentTransactions,
-      monthName: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(now),
+      userName: data.user?.name || "User",
+      totalAssets: Number(data.totalAssets || 0),
+      monthlyIncome: Number(data.monthlyIncome || 0),
+      monthlyExpense: Number(data.monthlyExpense || 0),
+      savingsRate: Number(data.savingsRate || 0),
+      monthName: data.monthName,
+      recentTransactions: (data.recentTransactions || []).map((tx: any) => ({
+        id: tx.id.toString(),
+        // Mapping field dari JSON Laravel
+        title: tx.title || tx.description || "No Description",
+        category: tx.category,
+        amount: Number(tx.amount),
+        type: tx.type,
+        date: tx.date, // Pastikan format date dari Laravel sesuai (ISO string)
+      })),
     };
   } catch (error) {
-    console.error('Error getting dashboard stats:', error);
+    console.error("Error getting dashboard stats:", error);
     return null;
   }
 }
@@ -208,44 +191,40 @@ export async function deleteTransaction(id: string) {
   try {
     const session = await getSession();
     if (!session || !session.userId) {
-      return { success: false, message: 'Anda harus login terlebih dahulu.' };
+      return { success: false, message: "Anda harus login terlebih dahulu." };
     }
 
-    const transactionId = BigInt(id);
-
-    await db.$transaction(async (tx) => {
-      // 1. Fetch old transaction
-      const transaction = await tx.transactions.findUnique({
-        where: { id: transactionId },
-      });
-
-      if (!transaction) throw new Error('Transaksi tidak ditemukan.');
-
-      // 2. Revert wallet balance
-      const balanceRevert = transaction.type === 'income' ? -Number(transaction.amount) : Number(transaction.amount);
-      await tx.wallets.update({
-        where: { id: transaction.wallet_id },
-        data: {
-          balance: {
-            increment: balanceRevert,
-          },
+    // Pass user_id via query param atau body agar validasi di Laravel lolos
+    const res = await fetch(
+      `${API_ENDPOINTS.TRANSACTIONS}/${id}?id=${session.userId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
         },
-      });
+      }
+    );
 
-      // 3. Delete transaction
-      await tx.transactions.delete({
-        where: { id: transactionId },
-      });
-    });
+    const data = await res.json();
 
-    revalidatePath('/dashboard/transactions');
-    revalidatePath('/dashboard/wallets');
-    revalidatePath('/dashboard');
+    if (!res.ok) {
+      return {
+        success: false,
+        message: data.message || "Gagal menghapus transaksi.",
+      };
+    }
 
-    return { success: true, message: 'Transaksi berhasil dihapus!' };
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/wallets");
+    revalidatePath("/dashboard");
+
+    return { success: true, message: "Transaksi berhasil dihapus!" };
   } catch (error: any) {
-    console.error('Error deleting transaction:', error);
-    return { success: false, message: error.message || 'Terjadi kesalahan sistem saat menghapus transaksi.' };
+    console.error("Error deleting transaction:", error);
+    return {
+      success: false,
+      message: "Terjadi kesalahan sistem saat menghapus transaksi.",
+    };
   }
 }
 
@@ -253,68 +232,55 @@ export async function updateTransaction(formData: FormData) {
   try {
     const session = await getSession();
     if (!session || !session.userId) {
-      return { success: false, message: 'Anda harus login terlebih dahulu.' };
+      return { success: false, message: "Anda harus login terlebih dahulu." };
     }
 
-    const id = BigInt(formData.get('id') as string);
-    const walletId = BigInt(formData.get('wallet_id') as string);
-    const categoryId = BigInt(formData.get('category_id') as string);
-    const amount = Number(formData.get('amount'));
-    const type = formData.get('type') as 'income' | 'expense';
-    const transactionDate = new Date(formData.get('transaction_date') as string);
-    const description = formData.get('description') as string;
+    const id = formData.get("id") as string;
 
-    await db.$transaction(async (tx) => {
-      // 1. Fetch old transaction
-      const oldTx = await tx.transactions.findUnique({
-        where: { id },
-      });
+    const payload = {
+      // Auth fallback
+      user_id: session.userId,
 
-      if (!oldTx) throw new Error('Transaksi tidak ditemukan.');
+      wallet_id: formData.get("wallet_id"),
+      category_id: formData.get("category_id"),
+      amount: formData.get("amount"),
+      type: formData.get("type"),
+      transaction_date: formData.get("transaction_date"),
+      description: formData.get("description"),
+    };
 
-      // 2. Revert old wallet balance
-      const oldBalanceRevert = oldTx.type === 'income' ? -Number(oldTx.amount) : Number(oldTx.amount);
-      await tx.wallets.update({
-        where: { id: oldTx.wallet_id },
-        data: {
-          balance: {
-            increment: oldBalanceRevert,
-          },
-        },
-      });
+    console.log(payload);
 
-      // 3. Apply new wallet balance
-      const newBalanceChange = type === 'income' ? amount : -amount;
-      await tx.wallets.update({
-        where: { id: walletId },
-        data: {
-          balance: {
-            increment: newBalanceChange,
-          },
-        },
-      });
-
-      // 4. Update transaction
-      await tx.transactions.update({
-        where: { id },
-        data: {
-          wallet_id: walletId,
-          category_id: categoryId,
-          amount: amount,
-          type: type,
-          transaction_date: transactionDate,
-          description: description,
-        },
-      });
+    const res = await fetch(`${API_ENDPOINTS.TRANSACTIONS}/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
-    revalidatePath('/dashboard/transactions');
-    revalidatePath('/dashboard/wallets');
-    revalidatePath('/dashboard');
+    const data = await res.json();
 
-    return { success: true, message: 'Transaksi berhasil diupdate!' };
+    console.log(data);
+
+    if (!res.ok) {
+      return {
+        success: false,
+        message: data.message || "Gagal mengupdate transaksi.",
+      };
+    }
+
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/wallets");
+    revalidatePath("/dashboard");
+
+    return { success: true, message: "Transaksi berhasil diupdate!" };
   } catch (error: any) {
-    console.error('Error updating transaction:', error);
-    return { success: false, message: error.message || 'Terjadi kesalahan sistem saat mengedit transaksi.' };
+    console.error("Error updating transaction:", error);
+    return {
+      success: false,
+      message: "Terjadi kesalahan sistem saat mengedit transaksi.",
+    };
   }
 }

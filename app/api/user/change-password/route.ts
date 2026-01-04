@@ -4,7 +4,25 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "default_secret_key_change_me");
+import { API_ENDPOINTS } from "@/lib/api-config";
+import { getSession } from "@/lib/auth";
+
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "default_secret_key_change_me"
+);
+
+async function getAuthHeader() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session_token")?.value;
+
+  if (!token) return null;
+
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
 
 async function getUserId() {
   const sessionToken = (await cookies()).get("session_token")?.value;
@@ -18,39 +36,45 @@ async function getUserId() {
 }
 
 export async function PUT(req: Request) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-
   try {
+    const session = await getSession();
+    const headers = await getAuthHeader();
+
+    if (!session || !headers) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { currentPassword, newPassword } = body;
 
-    if (!currentPassword || !newPassword) {
-        return NextResponse.json({ message: "Current and new password are required" }, { status: 400 });
-    }
+    // Tambahkan ID user ke payload jika Laravel Anda membutuhkannya secara manual
+    const payload = {
+      ...body,
+      id: session.userId,
+    };
 
-    const user = await db.user.findUnique({
-      where: { id: BigInt(userId) },
+    const res = await fetch(`${API_ENDPOINTS.CHANGE_PASSWORD}`, {
+      method: "PUT",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
-    if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+    const data = await res.json();
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    console.log(data);
 
-    if (!isPasswordValid) {
-        return NextResponse.json({ message: "Incorrect current password" }, { status: 400 });
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    await db.user.update({
-      where: { id: BigInt(userId) },
-      data: { password: hashedPassword },
-    });
-
-    return NextResponse.json({ message: "Password updated successfully" });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Change Password Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
