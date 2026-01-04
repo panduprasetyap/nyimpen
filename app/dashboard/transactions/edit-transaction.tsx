@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { updateTransaction, getWalletsAndCategories } from '@/app/api/transaction/actions';
 import { useFormStatus } from 'react-dom';
@@ -41,11 +41,18 @@ export default function EditTransactionModal({ transaction }: EditTransactionPro
   const [categories, setCategories] = useState<{ id: string, name: string, type: string }[]>([]);
   const [type, setType] = useState<'income' | 'expense'>(transaction.type);
 
+  const formRef = useRef<HTMLFormElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       loadData();
     }
   }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); // Mencegah reload & submit otomatis
+    setShowConfirm(true); // Tampilkan modal konfirmasi
+  };
 
   async function loadData() {
     const data = await getWalletsAndCategories();
@@ -54,6 +61,8 @@ export default function EditTransactionModal({ transaction }: EditTransactionPro
   }
 
   async function clientAction(formData: FormData) {
+    formData.set('type', type);
+    console.log("Data dikirim ke server:", Object.fromEntries(formData));
     const result = await updateTransaction(formData);
     if (result?.success) {
       setShowConfirm(false);
@@ -92,8 +101,9 @@ export default function EditTransactionModal({ transaction }: EditTransactionPro
               </button>
             </div>
 
-            <form action={() => setShowConfirm(true)} className="space-y-8">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
               <input type="hidden" name="id" value={transaction.id} />
+     
               
               {/* Type Switcher */}
               <div className="flex p-2 bg-slate-50 rounded-2xl relative">
@@ -217,9 +227,11 @@ export default function EditTransactionModal({ transaction }: EditTransactionPro
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          const form = document.querySelector('form') as HTMLFormElement;
-                          clientAction(new FormData(form));
+                       onClick={() => {
+                          if (formRef.current) {
+                           const newData = new FormData(formRef.current);
+                            clientAction(newData);
+                          }
                         }}
                         className="flex-[2] px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-widest text-white bg-slate-900 hover:bg-slate-800 shadow-xl shadow-slate-900/20 transition-all active:scale-95"
                       >

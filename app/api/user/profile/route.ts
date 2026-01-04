@@ -1,89 +1,98 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { API_ENDPOINTS } from "@/lib/api-config";
+import { getSession } from "@/lib/auth";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "default_secret_key_change_me");
+// Helper untuk mengambil token dari cookies
+async function getAuthHeader() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session_token")?.value;
 
-async function getUserId() {
-  const sessionToken = (await cookies()).get("session_token")?.value;
-  if (!sessionToken) return null;
-  try {
-    const { payload } = await jwtVerify(sessionToken, JWT_SECRET);
-    return payload.userId as string;
-  } catch {
-    return null;
-  }
+  if (!token) return null;
+
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
 }
 
+// GET: Ambil Profile dari Laravel
 export async function GET(req: Request) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const headers = await getAuthHeader();
+  if (!headers)
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   try {
-    const user = await db.user.findUnique({
-      where: { id: BigInt(userId) },
-      select: {
-        name: true,
-        email: true,
-        job_title: true,
-        estimated_monthly_income: true,
-        photos: true,
-      },
+    const session = await getSession();
+    if (!session)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const userId = session.userId as string;
+
+    // Forward request ke Laravel: Route::get('profile')
+
+    const targetUrl = `${API_ENDPOINTS.PROFILE}?id=${userId}`;
+    const res = await fetch(targetUrl, {
+      method: "GET",
+      headers: headers,
+      cache: "no-store", // Data profil selalu dinamis, jangan di-cache
     });
 
-    if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+    const data = await res.json();
 
-    return NextResponse.json({
-        ...user,
-        estimated_monthly_income: user.estimated_monthly_income?.toNumber() || 0
-    });
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    // Berhasil, kembalikan data dari Laravel ke Frontend
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Fetch Profile Error:", error);
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 });
+    console.error("Fetch Profile Proxy Error:", error);
+    return NextResponse.json(
+      { message: "Failed to connect to backend" },
+      { status: 500 }
+    );
   }
 }
 
+// PUT: Update Profile ke Laravel
 export async function PUT(req: Request) {
-  const userId = await getUserId();
-  if (!userId) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  const headers = await getAuthHeader();
+  if (!headers)
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   try {
+    const session = await getSession();
+    if (!session)
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    const userId = session.userId as string;
     const body = await req.json();
-    const { name, email, job_title, estimated_monthly_income, photos } = body; // photos url if updated
 
-    // Validate email if changed? For now, we allow updating it freely but ideally check uniqueness.
-    // Assuming unique constraint on email might throw error if duplicate.
+    // Tambahkan ID ke body
+    const payload = { ...body, id: userId };
 
-    const updatedUser = await db.user.update({
-      where: { id: BigInt(userId) },
-      data: {
-        name,
-        email,
-        job_title,
-        estimated_monthly_income: estimated_monthly_income ? parseFloat(estimated_monthly_income) : 0,
-        photos: photos || undefined, // Only update if provided
-      },
-      select: {
-          id: true,
-          name: true,
-          email: true,
-          job_title: true,
-          estimated_monthly_income: true,
-          photos: true
-      }
+    console.log("Request Body:", body);
+
+    // Forward request ke Laravel: Route::put('profile')
+    const res = await fetch(API_ENDPOINTS.PROFILE, {
+      method: "PUT",
+      headers: headers,
+      body: JSON.stringify(payload),
     });
 
-    return NextResponse.json({
-        message: "Profile updated successfully",
-        user: {
-            ...updatedUser,
-            id: updatedUser.id.toString(),
-            estimated_monthly_income: updatedUser.estimated_monthly_income?.toNumber() || 0
-        }
-    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Jika validasi Laravel gagal (422), forward error-nya ke frontend
+      return NextResponse.json(data, { status: res.status });
+    }
+
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Update Profile Error:", error);
-    return NextResponse.json({ message: "Could not update profile" }, { status: 500 });
+    console.error("Update Profile Proxy Error:", error);
+    return NextResponse.json(
+      { message: "Failed to connect to backend" },
+      { status: 500 }
+    );
   }
 }

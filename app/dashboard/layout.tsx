@@ -1,13 +1,56 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose"; // Pastikan install jose
 
 import { getCurrentUser } from "@/lib/auth";
+import { API_ENDPOINTS } from "@/lib/api-config";
+
+const NEXT_PUBLIC_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "default_secret_key_change_me");
+
+async function getFreshUserProfile() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("session_token")?.value;
+
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const userId = payload.userId as string;
+
+    const targetUrl = `${API_ENDPOINTS.PROFILE}?id=${userId}`;
+    
+    const res = await fetch(targetUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      console.error("Failed to fetch profile from backend:", res.status);
+      return null;
+    }
+
+    const result = await res.json();
+    
+    return result.data || result;
+
+  } catch (error) {
+    console.error("Error getting fresh user profile:", error);
+    return null;
+  }
+}
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const user = await getFreshUserProfile();
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 md:pl-64 transition-all">
@@ -27,7 +70,7 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-slate-700 overflow-hidden">
                 {user?.photos ? (
-                    <img src={user.photos} alt={user.name} className="w-full h-full object-cover" />
+                    <img src={`${NEXT_PUBLIC_API_URL}${user.photos}`} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-xs font-bold bg-slate-600">
                         {user?.name?.charAt(0).toUpperCase() || 'U'}
@@ -51,11 +94,6 @@ export default async function DashboardLayout({
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 md:hidden z-20 flex justify-around items-center px-2 py-3 shadow-lg pb-safe">
         <MobileNavLink href="/dashboard" icon={<HomeIcon />} label="Home" />
         <MobileNavLink href="/dashboard/transactions" icon={<ListIcon />} label="Trans" />
-        <div className="relative -top-5">
-           <Link href="/dashboard/transactions" className="flex items-center justify-center w-14 h-14 bg-slate-900 rounded-full text-white shadow-xl hover:bg-slate-800 active:scale-95 transition-all">
-             <PlusIcon />
-           </Link>
-        </div>
         <MobileNavLink href="/dashboard/wallets" icon={<WalletIcon />} label="Wallets" />
         <MobileNavLink href="/dashboard/settings" icon={<SettingsIcon />} label="Settings" />
       </nav>

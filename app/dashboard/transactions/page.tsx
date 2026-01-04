@@ -6,6 +6,7 @@ export default async function TransactionsPage() {
   const transactions = await getTransactions();
   const { wallets } = await getWalletsAndCategories();
 
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">

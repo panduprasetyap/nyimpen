@@ -47,8 +47,8 @@ export default function RegisterPage() {
       <div className="max-w-md w-full">
         <div className="text-center mb-10">
           <img src="/assets/logo.png" alt="Nyimpen Logo" className="w-12 h-12 mx-auto mb-4 rounded-xl shadow-sm" />
-          <h1 className="text-2xl font-bold text-slate-900">Create Account</h1>
-          <p className="text-slate-500">Start your financial journey today</p>
+          <h1 className="text-2xl font-bold text-slate-900">Buat Akun Baru</h1>
+          <p className="text-slate-500">Mulai mengelola keuangan Anda dengan Nyimpen</p>
         </div>
 
         {error && (
@@ -127,7 +127,7 @@ export default function RegisterPage() {
         </form>
 
         <p className="mt-8 text-center text-sm text-slate-600">
-          Already have an account?{" "}
+          Sudah punya akun?{" "}
           <Link href="/public/login" className="font-semibold text-slate-900 hover:underline">
             Sign in
           </Link>
